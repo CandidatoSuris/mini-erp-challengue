@@ -20,6 +20,13 @@ public class PresupuestosController : ControllerBase
         return Ok(lista.Select(MapToDto).ToList());
     }
 
+    [HttpGet("todos")]
+    public async Task<ActionResult<List<PresupuestoDto>>> ListarTodos()
+    {
+        var lista = await _service.ListarTodosAsync();
+        return Ok(lista.Select(MapToDto).ToList());
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<PresupuestoDto>> Obtener(int id)
     {
@@ -55,6 +62,48 @@ public class PresupuestosController : ControllerBase
     {
         await _service.EliminarAsync(id);
         return NoContent();
+    }
+
+    [HttpPost("{id:int}/aprobar")]
+    public async Task<ActionResult<PresupuestoDto>> Aprobar(int id)
+    {
+        try
+        {
+            var presupuesto = await _service.AprobarAsync(id);
+            return Ok(MapToDto(presupuesto));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:int}/rechazar")]
+    public async Task<ActionResult<PresupuestoDto>> Rechazar(int id)
+    {
+        try
+        {
+            var presupuesto = await _service.RechazarAsync(id);
+            return Ok(MapToDto(presupuesto));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:int}/reabrir")]
+    public async Task<ActionResult<PresupuestoDto>> Reabrir(int id)
+    {
+        try
+        {
+            var presupuesto = await _service.ReabrirAsync(id);
+            return Ok(MapToDto(presupuesto));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     private PresupuestoDto MapToDto(Presupuesto p)

@@ -24,16 +24,18 @@ public class PresupuestoService
     public Totales CalcularTotales(Presupuesto presupuesto)
     {
         decimal subtotal = 0m;
+        decimal totalIva = 0m;
         foreach (var item in presupuesto.Items)
         {
             var subtotalLinea = item.Cantidad * item.PrecioUnitario * (1 - item.DescuentoPct / 100m);
+            var ivaLinea = subtotalLinea * (item.AlicuotaIva / 100m);
             subtotal += subtotalLinea;
+            totalIva += ivaLinea;
         }
 
-        var iva = subtotal * 0.21m;
-        var total = subtotal + iva;
+        var total = subtotal + totalIva;
 
-        return new Totales(subtotal, iva, total);
+        return new Totales(subtotal, totalIva, total);
     }
 
     public async Task<Presupuesto> CrearAsync(int clienteId, int validezDias, List<PresupuestoItem> items)
@@ -83,6 +85,16 @@ public class PresupuestoService
             .ToListAsync();
     }
 
+    public async Task<List<Presupuesto>> ListarTodosAsync()
+    {
+        return await _db.Presupuestos
+            .Include(p => p.Cliente)
+            .Include(p => p.Items)
+                .ThenInclude(i => i.Articulo)
+            .OrderByDescending(p => p.Numero)
+            .ToListAsync();
+    }
+
     public async Task EliminarAsync(int id)
     {
         var presupuesto = await _db.Presupuestos.FindAsync(id);
@@ -91,5 +103,44 @@ public class PresupuestoService
             _db.Presupuestos.Remove(presupuesto);
             await _db.SaveChangesAsync();
         }
+    }
+
+    public async Task<Presupuesto> AprobarAsync(int id)
+    {
+        var presupuesto = await ObtenerAsync(id)
+            ?? throw new InvalidOperationException("El presupuesto no existe.");
+
+        if (presupuesto.Estado != EstadoPresupuesto.Borrador)
+            throw new InvalidOperationException($"Solo se puede aprobar un presupuesto en Borrador. Estado actual: {presupuesto.Estado}.");
+
+        presupuesto.Estado = EstadoPresupuesto.Aprobado;
+        await _db.SaveChangesAsync();
+        return presupuesto;
+    }
+
+    public async Task<Presupuesto> RechazarAsync(int id)
+    {
+        var presupuesto = await ObtenerAsync(id)
+            ?? throw new InvalidOperationException("El presupuesto no existe.");
+
+        if (presupuesto.Estado != EstadoPresupuesto.Borrador)
+            throw new InvalidOperationException($"Solo se puede rechazar un presupuesto en Borrador. Estado actual: {presupuesto.Estado}.");
+
+        presupuesto.Estado = EstadoPresupuesto.Rechazado;
+        await _db.SaveChangesAsync();
+        return presupuesto;
+    }
+
+    public async Task<Presupuesto> ReabrirAsync(int id)
+    {
+        var presupuesto = await ObtenerAsync(id)
+            ?? throw new InvalidOperationException("El presupuesto no existe.");
+
+        if (presupuesto.Estado != EstadoPresupuesto.Rechazado)
+            throw new InvalidOperationException($"Solo se puede reabrir un presupuesto Rechazado. Estado actual: {presupuesto.Estado}.");
+
+        presupuesto.Estado = EstadoPresupuesto.Borrador;
+        await _db.SaveChangesAsync();
+        return presupuesto;
     }
 }

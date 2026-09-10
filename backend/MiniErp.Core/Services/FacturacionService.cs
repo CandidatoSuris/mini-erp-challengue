@@ -24,6 +24,12 @@ public class FacturacionService
             .FirstOrDefaultAsync(p => p.Id == presupuestoId)
             ?? throw new InvalidOperationException("El presupuesto no existe.");
 
+        if (presupuesto.Estado == EstadoPresupuesto.Facturado)
+            throw new InvalidOperationException("El presupuesto ya ha sido facturado");
+
+        if (presupuesto.Estado != EstadoPresupuesto.Aprobado)
+            throw new InvalidOperationException("Solo se puede facturar un presupuesto en estado Aprobado.");
+
         var vencimiento = presupuesto.Fecha.AddDays(presupuesto.ValidezDias);
         if (DateTime.UtcNow > vencimiento)
             throw new InvalidOperationException("El presupuesto esta vencido y no se puede facturar.");
@@ -31,6 +37,8 @@ public class FacturacionService
         foreach (var item in presupuesto.Items)
         {
             var articulo = await _db.Articulos.FirstAsync(a => a.Id == item.ArticuloId);
+            if (item.Cantidad > articulo.StockActual) 
+                throw new InvalidOperationException($"No hay suficiente Stock, se piden {item.Cantidad} y solo hay en Stock {articulo.StockActual}");
             articulo.StockActual -= item.Cantidad;
         }
 
