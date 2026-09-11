@@ -43,6 +43,11 @@ public class PresupuestoService
     {
         foreach (var item in items)
         {
+            if (item.Cantidad <= 0)
+                throw new InvalidOperationException("La cantidad debe ser mayor a cero.");
+            if (item.DescuentoPct < 0 || item.DescuentoPct > 100)
+                throw new InvalidOperationException("El descuento debe estar entre 0 y 100.");
+
             var articulo = await _db.Articulos.FirstOrDefaultAsync(a => a.Id == item.ArticuloId)
                 ?? throw new InvalidOperationException($"El articulo {item.ArticuloId} no existe.");
 
