@@ -25,5 +25,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Factura>().Property(f => f.Subtotal).HasColumnType("decimal(18,2)");
         modelBuilder.Entity<Factura>().Property(f => f.Iva).HasColumnType("decimal(18,2)");
         modelBuilder.Entity<Factura>().Property(f => f.Total).HasColumnType("decimal(18,2)");
+
+        // Red de seguridad a nivel de base de datos: el calculo de "proximo numero" y el
+        // chequeo de "ya facturado" son check-then-act en la capa de aplicacion, asi que
+        // dos requests concurrentes podrian pasar ambos la validacion. Estos indices unicos
+        // no evitan la carrera, pero garantizan que si ocurre, la base la rechaza en vez de
+        // guardar numeros duplicados o dos facturas para el mismo presupuesto.
+        modelBuilder.Entity<Presupuesto>().HasIndex(p => p.Numero).IsUnique();
+        modelBuilder.Entity<Factura>().HasIndex(f => f.Numero).IsUnique();
+        modelBuilder.Entity<Factura>().HasIndex(f => f.PresupuestoId).IsUnique();
     }
 }
