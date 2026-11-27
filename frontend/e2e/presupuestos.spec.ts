@@ -40,6 +40,23 @@ test("alta con alicuotas mixtas: los totales en vivo coinciden con la regla del 
   await expect(primeraFila.locator(".badge")).toHaveText("Aprobado");
 });
 
+test("el redondeo del IVA en vivo coincide con el backend aun en el caso limite de punto flotante", async ({ page }) => {
+  await page.goto("/nuevo");
+
+  await page.getByLabel("Cliente").selectOption({ label: "Consumidor Final" });
+  await agregarArticulo(page, "ART-004"); // precio 4500, alicuota 10.5%
+
+  // Con 31% de descuento: subtotalLinea=3105.00, iva "matematico"=326.025.
+  // Un redondeo float ingenuo representa esto como 326.0249999999999 y redondea
+  // mal a 326.02; el backend (decimal, AwayFromZero) da 326.03.
+  await page.locator(".items-table__input").nth(1).fill("31");
+
+  const totales = page.locator(".totales");
+  await expect(totales).toContainText("$3.105,00");
+  await expect(totales).toContainText("$326,03");
+  await expect(totales).toContainText("$3.431,03");
+});
+
 test("facturar sin stock suficiente muestra el error del backend en la fila", async ({ page }) => {
   await page.goto("/nuevo");
 
@@ -72,6 +89,8 @@ test("facturar un presupuesto valido lo pasa a Facturado y oculta el boton", asy
 
   await expect(primeraFila.locator(".badge")).toHaveText("Facturado");
   await expect(primeraFila.getByRole("button", { name: "Facturar" })).toHaveCount(0);
+  // Un presupuesto facturado es inmutable: tampoco se puede borrar desde la UI.
+  await expect(primeraFila.getByRole("button", { name: "Eliminar" })).toHaveCount(0);
 });
 
 test("duplicar un presupuesto precarga el form y crea uno nuevo con numero distinto", async ({ page }) => {

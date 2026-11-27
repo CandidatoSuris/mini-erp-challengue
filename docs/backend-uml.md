@@ -69,10 +69,13 @@ catálogo cambia después, el presupuesto ya emitido no se mueve — es la base 
 "Duplicar presupuesto" (Parte C): ahí sí hay que refrescar el precio a propósito.
 
 **Límite conocido:** la relación `Presupuesto → Factura` es 1:0..1 por regla de negocio
-(idempotencia), pero hoy se garantiza sólo a nivel de servicio (`FacturacionService`
-chequea `Estado == Facturado`), no con una constraint de base de datos. Bajo concurrencia
-real, dos requests simultáneos podrían pasar el chequeo antes de que el primero confirme.
-Pendiente para producción.
+(idempotencia). El chequeo de `Estado == Facturado` en `FacturacionService` sigue siendo
+check-then-act (sin transacción serializable ni lock), así que dos requests simultáneos
+todavía podrían pasar ambos la validación antes de que el primero confirme. Lo que sí hay
+ahora, tras una revisión de código (ver `NOTES.md`), es un índice único en
+`Factura.PresupuestoId` como red de seguridad: si la carrera ocurre, la segunda escritura
+falla con 409 en vez de crear una factura duplicada silenciosa. La solución completa
+(transacción serializable o lock pesimista) sigue pendiente para producción.
 
 ## Ciclo de vida de un Presupuesto
 
@@ -111,6 +114,7 @@ los asigna actualmente.
 | Stock nunca negativo al facturar | `FacturacionService.FacturarAsync` |
 | Un presupuesto se factura una sola vez | `FacturacionService.FacturarAsync` (chequeo de `Estado`) |
 | Presupuesto vencido no se factura | `FacturacionService.FacturarAsync` (`Fecha + ValidezDias`) |
-| Numeración secuencial sin colisiones | `NumeracionService` (`MAX(Numero)+1`) |
+| Numeración secuencial sin colisiones | `NumeracionService` (`MAX(Numero)+1`) + índice único en `Numero` como red de seguridad |
+| Un presupuesto facturado es inmutable (no se puede eliminar) | `PresupuestoService.EliminarAsync` |
 | Cantidad y descuento válidos | `CrearPresupuestoItemDto` (`DataAnnotations`) |
 | Top-N artículos por monto facturado en un rango de fechas | `ReportesService.TopArticulosPorMontoFacturadoAsync` (`GET /api/reportes/top-articulos`) |

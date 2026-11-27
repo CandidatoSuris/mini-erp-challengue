@@ -43,5 +43,11 @@ public class FacturasController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (DbUpdateException)
+        {
+            // Dos requests concurrentes pasaron el chequeo de "ya facturado" antes de que
+            // el primero confirmara; el indice unico en Factura.PresupuestoId lo frena aca.
+            return Conflict(new { error = "El presupuesto ya fue facturado por otra solicitud. Refresca e intenta de nuevo." });
+        }
     }
 }

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using MiniErp.Api.Dtos;
 using MiniErp.Core.Models;
 using MiniErp.Core.Services;
@@ -42,19 +43,32 @@ public class PresupuestosController : ControllerBase
         {
             var creado = await _service.CrearAsync(request.ClienteId, request.ValidezDias, items);
             var completo = await _service.ObtenerAsync(creado.Id);
-            return Ok(MapToDto(completo!));
+            return CreatedAtAction(nameof(Obtener), new { id = creado.Id }, MapToDto(completo!));
         }
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { error = ex.Message });
+        }
+        catch (DbUpdateException)
+        {
+            // Dos requests concurrentes calcularon el mismo "proximo numero" antes de que
+            // el primero confirmara; el indice unico en Presupuesto.Numero lo frena aca.
+            return Conflict(new { error = "Conflicto al numerar el presupuesto, probablemente por otra solicitud simultanea. Intenta de nuevo." });
         }
     }
 
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Eliminar(int id)
     {
-        await _service.EliminarAsync(id);
-        return NoContent();
+        try
+        {
+            await _service.EliminarAsync(id);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     private PresupuestoDto MapToDto(Presupuesto p)

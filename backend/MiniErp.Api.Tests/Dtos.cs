@@ -23,3 +23,5 @@ public record PresupuestoDto(
     decimal Total);
 
 public record TopArticuloDto(int ArticuloId, string Codigo, string Descripcion, int CantidadFacturada, decimal MontoFacturado);
+
+public record FacturaDto(int Id, int Numero, DateTime Fecha, int PresupuestoId, decimal Subtotal, decimal Iva, decimal Total);

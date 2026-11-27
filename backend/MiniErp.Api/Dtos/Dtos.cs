@@ -8,7 +8,10 @@ public record CrearPresupuestoItemDto(
     [Range(1, int.MaxValue, ErrorMessage = "La cantidad debe ser mayor a cero.")] int Cantidad,
     [Range(0, 100, ErrorMessage = "El descuento debe estar entre 0 y 100.")] decimal DescuentoPct);
 
-public record CrearPresupuestoRequest(int ClienteId, int ValidezDias, List<CrearPresupuestoItemDto> Items);
+public record CrearPresupuestoRequest(
+    int ClienteId,
+    [Range(1, int.MaxValue, ErrorMessage = "La validez en dias debe ser mayor a cero.")] int ValidezDias,
+    [MinLength(1, ErrorMessage = "El presupuesto necesita al menos un item.")] List<CrearPresupuestoItemDto> Items);
 
 // ---- Responses ----
 public record ArticuloDto(

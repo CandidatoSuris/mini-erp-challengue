@@ -64,9 +64,11 @@ export function PresupuestosTable({ presupuestos, facturandoId, erroresFacturaci
                 <Link to={`/nuevo?duplicarDe=${p.id}`} className="link-button">
                   Duplicar
                 </Link>
-                <button type="button" className="link-button" onClick={() => onEliminar(p.id)}>
-                  Eliminar
-                </button>
+                {p.estado !== "Facturado" && (
+                  <button type="button" className="link-button" onClick={() => onEliminar(p.id)}>
+                    Eliminar
+                  </button>
+                )}
               </div>
               {erroresFacturacion[p.id] && <div className="alert alert--error alert--inline">{erroresFacturacion[p.id]}</div>}
             </td>

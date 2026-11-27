@@ -165,14 +165,16 @@ deben funcionar" del README: crear y listar, IVA con alícuotas mixtas, numeraci
 tras borrar (forzando el escenario real de colisión: borro el del medio, no el
 último), cantidad inválida, facturar sin stock, facturar dos veces, y el
 reporte de top-N artículos (orden descendente por monto, fuera de rango de
-fechas, validación de fechas invertidas). 15/15 tests en verde (`dotnet test`
-sobre toda la solución, corrido en Docker).
+fechas, validación de fechas invertidas), más los 7 de la revisión de código de
+la siguiente sección. **22/22 tests en verde** (`dotnet test` sobre toda la
+solución, corrido en Docker).
 
-**Frontend — Playwright (`frontend/e2e/`):** 5 tests e2e contra la app real
+**Frontend — Playwright (`frontend/e2e/`):** 6 tests e2e contra la app real
 (frontend + backend corriendo juntos): alta con alícuotas mixtas (los totales en
-vivo tienen que coincidir con lo que persiste el backend), facturar sin stock
-suficiente (el error del backend se ve en la fila), facturar un presupuesto
-válido (pasa a "Facturado" y el botón desaparece), duplicar un presupuesto
+vivo tienen que coincidir con lo que persiste el backend), el caso límite de
+redondeo de la revisión de código, facturar sin stock suficiente (el error del
+backend se ve en la fila), facturar un presupuesto válido (pasa a "Facturado" y
+los botones de Facturar/Eliminar desaparecen), duplicar un presupuesto
 (precarga el form y crea uno con número nuevo), y el reporte de top artículos
 (factura uno propio y verifica que aparezca con el monto correcto).
 `playwright.config.ts` levanta el backend por Docker (borrando el `.db` antes,
@@ -185,6 +187,76 @@ corrida. Correr con `npm run test:e2e` desde `frontend/`.
 > Nota: si la corrida de Playwright se corta de forma abrupta (Ctrl+C duro, kill
 > del proceso), el contenedor del backend puede quedar corriendo — `docker compose
 > down` desde la raíz del repo lo limpia.
+
+## Revisión de código (CR) y correcciones
+
+Le pedí a otro agente que hiciera un code review del diff completo. Devolvió 8
+hallazgos (3 críticos, 5 altos). Antes de aceptar ninguno los verifiqué contra
+el código real — un CR de un agente es una hipótesis, no un hecho — y encontré
+que uno de los sub-claims era directamente falso: decía que `items: null` tira
+un `NullReferenceException` → 500, pero en los hechos ASP.NET Core ya lo
+rechaza con 400 ("Items field is required") gracias a `Nullable` habilitado en
+el proyecto. Lo descarté y seguí con el resto.
+
+**Corregidos**, en el orden que priorizamos (impacto/costo):
+
+1. **`DELETE` de un presupuesto facturado destruía la factura.** Reproduje el
+   escenario exacto antes de tocar nada: facturé ART-002 x5 (stock 80→75),
+   borré el presupuesto → `204` silencioso, la factura desapareció de
+   `GET /api/facturas`, y el stock **no** se revirtió (siguió en 75). Era el
+   hallazgo más grave de los 8 — corrupción de datos silenciosa, no solo un
+   error de validación. Fix: `EliminarAsync` rechaza con 400 si
+   `Estado == Facturado`; el botón "Eliminar" del front ahora se esconde igual
+   que "Facturar" una vez facturado.
+2. **Numeración y facturación eran check-then-act sin red de seguridad en la
+   base.** Agregué índices únicos (`Presupuesto.Numero`, `Factura.Numero`,
+   `Factura.PresupuestoId`) — no evitan la carrera entre dos requests
+   simultáneos, pero convierten una colisión silenciosa en un `409 Conflict`
+   detectable en vez de guardar datos duplicados. Cubierto con dos tests que
+   insertan directo por `DbContext` (bypaseando el chequeo de aplicación) para
+   confirmar que la constraint de la base realmente frena el duplicado.
+3. **Validaciones de request incompletas:** `items: []` creaba un presupuesto
+   facturable de $0 (`[MinLength(1)]`), un `clienteId` inexistente tiraba un
+   `DbUpdateException` sin atrapar → 500 con stack trace completo filtrado al
+   cliente (ahora se valida explícito en `CrearAsync`, igual que ya se hacía
+   con el artículo), y `validezDias: 0` o negativo creaba un presupuesto que
+   nacía vencido (`[Range(1, int.MaxValue)]` + el mismo chequeo agregado en el
+   form del cliente).
+4. **`POST /api/presupuestos` devolvía `200 OK`** en vez de `201 Created` con
+   header `Location`. Cambiado a `CreatedAtAction`.
+5. **El redondeo del IVA en vivo del cliente no coincidía siempre con el
+   backend.** Antes de arreglarlo reproduje el caso exacto que reportó el CR
+   (ART-004, 31% de descuento → el front daba $326,02, el backend $326,03) y
+   después armé un fuzz test de 200.000 casos aleatorios contra una referencia
+   exacta en enteros (`BigInt`, sin floats) para confirmar que la nueva función
+   de redondeo no tiene otros casos rotos, no solo el que ya conocíamos.
+   `Number.EPSILON` fijo no alcanza para montos grandes (el ULP a esa escala es
+   órdenes de magnitud mayor); la solución fue redondear primero a una
+   precisión bien por encima de 2 decimales para absorber el ruido de punto
+   flotante, y recién ahí aplicar el redondeo final.
+6. **Manejo de errores centralizado:** agregué un `app.UseExceptionHandler`
+   global (con `ILogger`) como red de seguridad para cualquier excepción no
+   atrapada explícitamente en un controller — nunca más un stack trace crudo
+   al cliente.
+
+**No corregidos, documentados como deuda consciente:**
+
+- **Regla `SubtotalLinea` duplicada** entre `PresupuestoService.CalcularTotales`
+  y `PresupuestosController.MapToDto`. Es un riesgo real de divergencia a
+  futuro, pero hoy ambas copias son idénticas — no hay bug, hay deuda.
+  Refactor pendiente: moverla a un único lugar (función estática pura o al
+  dominio) y dejar de instanciar `AppDbContext` solo para testear una función
+  que no toca la base.
+- **Arquitectura inconsistente entre controllers** (`Presupuestos` usa un
+  service, `Articulos`/`Clientes`/`Facturas` inyectan `AppDbContext` directo) y
+  las consultas N+1 en `CrearAsync`/`FacturarAsync`. Esto ya estaba así en el
+  código que nos dieron al empezar el challenge — no es algo que introdujimos
+  nosotros, y el propio CR concede que "para el alcance está bien". No lo
+  toqué para no meter un refactor grande de bajo valor inmediato.
+- **Concurrencia real sigue sin ser 100% a prueba de balas:** los índices
+  únicos convierten la colisión en un error visible, pero la solución
+  "correcta" para producción (transacción serializable o un lock pesimista)
+  sigue pendiente — queda en la sección de abajo.
 
 ## Cómo usé IA
 
@@ -227,6 +299,17 @@ localmente (sí tenía Node).
 - **Qué revisé/probé yo antes de aceptar cada entrega:** cada feature la probé
   manualmente en el browser (capturas + inspección de red/consola) antes de
   darla por terminada, además de los tests automáticos que fue agregando.
+- **Code review con un segundo agente:** le pedí a otro agente (no esta misma
+  sesión) que revisara el diff completo. Devolvió 8 hallazgos. No acepté
+  ninguno a ciegas — le pedí a esta sesión que verificara cada uno contra el
+  código real antes de tocar nada, y encontró que uno de los hallazgos del
+  otro agente era falso (decía que `items: null` tiraba un 500; en los hechos
+  ASP.NET ya lo rechazaba con 400). De los 7 restantes, confirmó cada uno con
+  `curl` contra la API real antes de arreglarlo — incluido reproducir
+  numéricamente el bug de redondeo (`node -e`) y fuzz-testearlo contra una
+  referencia exacta con 200.000 casos antes de dar el fix por bueno. Ver
+  "Revisión de código (CR) y correcciones" para el detalle de qué se corrigió
+  y qué quedó como deuda consciente.
 
 ## Qué haría con más tiempo / qué falta para producción
 
@@ -239,12 +322,15 @@ localmente (sí tenía Node).
   columna es trivial de agregar en dev (se borra el `.db`) pero no hay un
   camino de migración real para una base ya en producción — lo primero que
   haría si se sigue este camino es migrar a EF Migrations.
-- **Idempotencia de facturación bajo concurrencia real:** hoy se garantiza sólo
-  a nivel de servicio (`FacturacionService` chequea `Estado == Facturado` antes
-  de escribir). Con dos requests simultáneos sobre el mismo presupuesto podrían
-  colarse ambos antes de que el primero confirme. Para producción: una
-  transacción con aislamiento serializable, o un constraint único en
-  `Factura.PresupuestoId`.
+- **Idempotencia de facturación bajo concurrencia real:** `FacturacionService`
+  sigue chequeando `Estado == Facturado` como check-then-act (sin transacción
+  serializable ni lock), así que dos requests simultáneos todavía podrían
+  pasar ambos la validación antes de que el primero confirme. Lo que sí agregué
+  (ver "Revisión de código") es un índice único en `Factura.PresupuestoId` como
+  red de seguridad: si la carrera ocurre, la segunda escritura falla con 409 en
+  vez de crear una factura duplicada silenciosa. Para producción real, lo
+  siguiente sería una transacción con aislamiento serializable (o un lock
+  pesimista sobre la fila del presupuesto).
 - **Autenticación/autorización:** no hay ninguna — cualquiera puede pegarle a
   la API. Mínimo viable: JWT + algún esquema de roles (vendedor vs. quien
   factura).

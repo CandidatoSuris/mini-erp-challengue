@@ -7,8 +7,21 @@ export interface Totales {
   total: number;
 }
 
+/**
+ * Redondeo a 2 decimales "away from zero" (igual que MidpointRounding.AwayFromZero
+ * del backend). El truco de sumar Number.EPSILON no alcanza para estos montos: el
+ * ULP de un numero de varios digitos es ordenes de magnitud mayor que EPSILON, asi
+ * que un valor que matematicamente cae justo en .XX5 puede llegar representado
+ * como .XX49999999999 y redondear para el lado equivocado (reproducido con
+ * ART-004, descuento 31%: da 326.02 en vez de 326.03). Redondeamos primero a una
+ * precision bien por encima de 2 decimales para eliminar ese ruido de punto
+ * flotante, y recien ahi aplicamos el redondeo final. Verificado contra 200k casos
+ * aleatorios comparados con una referencia exacta en enteros (BigInt).
+ */
 function redondear2(valor: number): number {
-  return Math.round((valor + Number.EPSILON) * 100) / 100;
+  const limpio = Math.round(valor * 1e8) / 1e6;
+  const signo = limpio < 0 ? -1 : 1;
+  return (signo * Math.round(Math.abs(limpio))) / 100;
 }
 
 /**

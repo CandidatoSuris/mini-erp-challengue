@@ -40,6 +40,10 @@ public class PresupuestoService
 
     public async Task<Presupuesto> CrearAsync(int clienteId, int validezDias, List<PresupuestoItem> items)
     {
+        var clienteExiste = await _db.Clientes.AnyAsync(c => c.Id == clienteId);
+        if (!clienteExiste)
+            throw new InvalidOperationException($"El cliente {clienteId} no existe.");
+
         foreach (var item in items)
         {
             var articulo = await _db.Articulos.FirstOrDefaultAsync(a => a.Id == item.ArticuloId)
@@ -88,10 +92,12 @@ public class PresupuestoService
     public async Task EliminarAsync(int id)
     {
         var presupuesto = await _db.Presupuestos.FindAsync(id);
-        if (presupuesto is not null)
-        {
-            _db.Presupuestos.Remove(presupuesto);
-            await _db.SaveChangesAsync();
-        }
+        if (presupuesto is null) return;
+
+        if (presupuesto.Estado == EstadoPresupuesto.Facturado)
+            throw new InvalidOperationException("No se puede eliminar un presupuesto ya facturado.");
+
+        _db.Presupuestos.Remove(presupuesto);
+        await _db.SaveChangesAsync();
     }
 }

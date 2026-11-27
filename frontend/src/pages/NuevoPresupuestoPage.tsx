@@ -59,6 +59,10 @@ export function NuevoPresupuestoPage() {
       setValidacion("Elegí un cliente.");
       return;
     }
+    if (validezDias <= 0) {
+      setValidacion("La validez en días tiene que ser mayor a cero.");
+      return;
+    }
     if (items.length === 0) {
       setValidacion("Agregá al menos un artículo.");
       return;
