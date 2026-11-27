@@ -116,9 +116,23 @@ falló (sin stock, vencido, ya facturado), no en un alert genérico.
   esconde una vez que el estado es `Facturado`.
 - Eliminar presupuesto desde la grilla (con confirmación).
 
-**Dejé afuera (Parte C, stretch) por tiempo:** duplicar presupuesto y el reporte de
-top-N artículos facturados. El detalle de qué haría con más tiempo está en la
-última sección.
+**Hecho (Parte C, stretch):**
+- **Duplicar presupuesto** — sin agregar ningún endpoint nuevo. El insight: `POST
+  /api/presupuestos` ya toma el precio/alícuota **actuales** del artículo al crear
+  (`PresupuestoService.CrearAsync`, no confía en lo que mande el cliente) y asigna
+  número y fecha nuevos solo. Entonces "clonar con número nuevo, fecha de hoy y
+  precios refrescados" es exactamente lo que ya hace ese endpoint — no hay nada
+  que agregar del lado del backend. Del lado del cliente: botón "Duplicar" en la
+  grilla → `GET /api/presupuestos/{id}` (para traer cliente + items) +
+  `GET /api/articulos` sin filtro (para precios actuales, y que el *preview* de
+  totales en el form ya los muestre refrescados, no los viejos) → precarga el
+  mismo formulario de alta (`/nuevo?duplicarDe={id}`) → el usuario revisa/edita y
+  confirma con "Crear presupuesto", que es el `POST` normal. Nuevo hook
+  `useDuplicarPresupuesto` + un método `reemplazarItems` en `usePresupuestoForm`;
+  nada más cambió. Cubierto por un test e2e adicional (ahora son 4).
+
+**Dejé afuera (stretch) por tiempo:** el reporte de top-N artículos facturados.
+El detalle de qué haría con más tiempo está en la última sección.
 
 ## Tests propios (Parte C)
 
@@ -157,5 +171,69 @@ Para qué partes la usaste, qué le pediste, qué aceptaste y qué descartaste,
 y dónde se equivocó o te llevó por mal camino.
 -->
 
+Usé Claude Code (Claude Sonnet 5) para todo el desarrollo, en una sesión continua,
+con Docker como entorno de ejecución porque no tenía el SDK de .NET instalado
+localmente (sí tenía Node).
+
+- **Bugs del backend:** le pedí que leyera el README, corriera los tests
+  existentes (`dotnet test` vía Docker, 3/6 fallando al principio) y los leyera
+  junto con el código para encontrar los bugs plantados. Encontró los 6 (2 con
+  test que los delataba, 4 explorando el código y los flujos del README) y los
+  arregló. Verifiqué cada fix yo mismo: corriendo los tests (6/6 verde) y
+  probando a mano con `curl` los 5 flujos de la sección "Flujos que deben
+  funcionar" contra el backend real.
+- **Arquitectura antes que código:** antes de tocar el frontend le pedí
+  explícitamente que armara documentación UML (modelo de clases + ciclo de vida
+  del backend, y después capas/dependencias + diagramas de secuencia del
+  frontend) para revisar el diseño *antes* de que generara una sola línea de
+  React. Eso me dejó objetar la estructura (ver `docs/backend-uml.md` y
+  `docs/frontend-uml.md`) sin tener que leer código para entenderla.
+- **Corrección de proceso:** la primera vez hizo `git commit` por su cuenta sin
+  pedirme autorización. Le corté eso ahí mismo y le pedí que de ahí en más
+  siempre hiciera `git add` y me pasara el mensaje de commit, pero que el commit
+  en sí lo haga yo — lo respetó el resto de la sesión.
+- **Duplicar presupuesto (Parte C):** yo tenía la intuición de que se podía
+  hacer sin tocar el backend; se lo planteé como pregunta y me confirmó el
+  razonamiento señalando el detalle técnico exacto que lo hace posible
+  (`CrearAsync` ya refresca precio/alícuota desde el artículo actual, no confía
+  en lo que manda el cliente). Lo implementé con esa base.
+- **Dónde frené una sugerencia:** cuando pregunté si valía la pena trackear de
+  qué presupuesto viene un duplicado, en vez de implementarlo directo me dio el
+  trade-off (columna nueva, sin EF Migrations reales en el proyecto hoy, cambio
+  de contrato en la API) y lo dejé para "qué haría con más tiempo" en vez de
+  meterlo — no quería inflar el alcance de algo que no pedía el README.
+- **Qué revisé/probé yo antes de aceptar cada entrega:** cada feature la probé
+  manualmente en el browser (capturas + inspección de red/consola) antes de
+  darla por terminada, además de los tests automáticos que fue agregando.
+
 ## Qué haría con más tiempo / qué falta para producción
 
+- **Trazabilidad de duplicados:** agregar `PresupuestoOrigenId` (nullable,
+  auto-referencia a `Presupuesto`) para saber de qué presupuesto viene un
+  duplicado, exponerlo en `CrearPresupuestoRequest`/`PresupuestoDto`, y mostrar
+  "Duplicado de #N" en la grilla. No lo hice ahora porque implica volver a
+  tocar el contrato de la API por algo que el README no pedía explícitamente;
+  dado que el proyecto usa `Database.EnsureCreated()` y no EF Migrations, la
+  columna es trivial de agregar en dev (se borra el `.db`) pero no hay un
+  camino de migración real para una base ya en producción — lo primero que
+  haría si se sigue este camino es migrar a EF Migrations.
+- **Reporte top-N artículos facturados** (Parte C, stretch que no llegué a
+  hacer): endpoint que agregue por `Factura`/`PresupuestoItem` en un rango de
+  fechas, más una vista simple en el cliente.
+- **Idempotencia de facturación bajo concurrencia real:** hoy se garantiza sólo
+  a nivel de servicio (`FacturacionService` chequea `Estado == Facturado` antes
+  de escribir). Con dos requests simultáneos sobre el mismo presupuesto podrían
+  colarse ambos antes de que el primero confirme. Para producción: una
+  transacción con aislamiento serializable, o un constraint único en
+  `Factura.PresupuestoId`.
+- **Autenticación/autorización:** no hay ninguna — cualquiera puede pegarle a
+  la API. Mínimo viable: JWT + algún esquema de roles (vendedor vs. quien
+  factura).
+- **Paginación:** `GET /api/presupuestos` y `GET /api/articulos` devuelven todo
+  sin paginar. Con un catálogo o historial grande esto no escala.
+- **Estados muertos del enum:** `Borrador` y `Rechazado` existen en
+  `EstadoPresupuesto` pero ningún endpoint los asigna hoy — quedaron de una
+  posible etapa de aprobación manual que nunca se implementó. Si se quiere ese
+  flujo de verdad, hacen falta endpoints para aprobar/rechazar.
+- **CI:** no hay pipeline corriendo `dotnet test` + `playwright test`
+  automáticamente en cada PR — hoy lo corro manualmente en Docker.
