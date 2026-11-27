@@ -1,7 +1,12 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace MiniErp.Api.Dtos;
 
 // ---- Requests ----
-public record CrearPresupuestoItemDto(int ArticuloId, int Cantidad, decimal DescuentoPct);
+public record CrearPresupuestoItemDto(
+    int ArticuloId,
+    [Range(1, int.MaxValue, ErrorMessage = "La cantidad debe ser mayor a cero.")] int Cantidad,
+    [Range(0, 100, ErrorMessage = "El descuento debe estar entre 0 y 100.")] decimal DescuentoPct);
 
 public record CrearPresupuestoRequest(int ClienteId, int ValidezDias, List<CrearPresupuestoItemDto> Items);
 
