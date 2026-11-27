@@ -1,8 +1,9 @@
 # Arquitectura del cliente — Mini ERP (frontend)
 
-> Capas, dependencias entre ellas y los tres flujos principales (alta de presupuesto,
-> facturar, duplicar), tal como quedaron implementados en `frontend/src/`. Ver
-> `NOTES.md` para las decisiones de producto; este documento es el mapa técnico.
+> Capas, dependencias entre ellas y los flujos principales (alta de presupuesto,
+> facturar, duplicar, reporte de top artículos), tal como quedaron implementados
+> en `frontend/src/`. Ver `NOTES.md` para las decisiones de producto; este
+> documento es el mapa técnico.
 
 ## Organización
 
@@ -15,7 +16,8 @@ contrario — un `component` nunca importa un `service`.
 frontend/src/
 ├─ pages/
 │  ├─ PresupuestosListPage.tsx      # grilla + accion "Facturar"
-│  └─ NuevoPresupuestoPage.tsx      # alta: cliente + items + totales en vivo
+│  ├─ NuevoPresupuestoPage.tsx      # alta/duplicar: cliente + items + totales en vivo
+│  └─ ReportePage.tsx               # filtro de fechas + top N -> tabla
 ├─ components/
 │  ├─ PresupuestosTable.tsx
 │  ├─ EstadoBadge.tsx
@@ -23,6 +25,7 @@ frontend/src/
 │  ├─ ArticuloSearchBox.tsx
 │  ├─ PresupuestoItemsEditor.tsx
 │  ├─ TotalesSummary.tsx
+│  ├─ TopArticulosTable.tsx
 │  └─ ErrorAlert.tsx
 ├─ hooks/
 │  ├─ usePresupuestos.ts            # listar + eliminar + refrescar
@@ -31,16 +34,18 @@ frontend/src/
 │  ├─ useClientes.ts
 │  ├─ useArticuloSearch.ts          # busqueda con debounce
 │  ├─ usePresupuestoForm.ts         # items del borrador + calcularTotales()
-│  └─ useDuplicarPresupuesto.ts     # precarga el form desde un presupuesto existente
+│  ├─ useDuplicarPresupuesto.ts     # precarga el form desde un presupuesto existente
+│  └─ useTopArticulos.ts            # dispara la consulta del reporte a pedido
 ├─ services/
 │  ├─ http.ts                       # fetch wrapper + ApiError
 │  ├─ clientesService.ts
 │  ├─ articulosService.ts
 │  ├─ presupuestosService.ts
-│  └─ facturasService.ts
+│  ├─ facturasService.ts
+│  └─ reportesService.ts
 ├─ types/
 │  └─ dtos.ts                       # espejo de MiniErp.Api.Dtos + ItemBorrador
-├─ App.tsx                          # rutas: "/" y "/nuevo"
+├─ App.tsx                          # rutas: "/", "/nuevo" y "/reporte"
 └─ main.tsx
 ```
 
@@ -65,6 +70,7 @@ flowchart TB
     subgraph PAGES["pages/"]
         P1["PresupuestosListPage"]
         P2["NuevoPresupuestoPage"]
+        P3["ReportePage"]
     end
     subgraph COMPONENTS["components/ (presentacionales)"]
         C1["PresupuestosTable"]
@@ -74,6 +80,7 @@ flowchart TB
         C5["PresupuestoItemsEditor"]
         C6["TotalesSummary"]
         C7["ErrorAlert"]
+        C8["TopArticulosTable"]
     end
     subgraph HOOKS["hooks/"]
         H1["usePresupuestos"]
@@ -83,6 +90,7 @@ flowchart TB
         H5["usePresupuestoForm"]
         H6["useCrearPresupuesto"]
         H7["useDuplicarPresupuesto"]
+        H8["useTopArticulos"]
     end
     subgraph SERVICES["services/"]
         S1["presupuestosService"]
@@ -90,6 +98,7 @@ flowchart TB
         S3["clientesService"]
         S4["articulosService"]
         S5["http"]
+        S6["reportesService"]
     end
 
     P1 --> C1
@@ -109,6 +118,10 @@ flowchart TB
     P2 --> H6
     P2 --> H7
 
+    P3 --> C7
+    P3 --> C8
+    P3 --> H8
+
     H1 --> S1
     H2 --> S2
     H3 --> S3
@@ -116,8 +129,10 @@ flowchart TB
     H6 --> S1
     H7 --> S1
     H7 --> S4
+    H8 --> S6
 
     S1 --> S5
+    S6 --> S5
     S2 --> S5
     S3 --> S5
     S4 --> S5
@@ -267,13 +282,17 @@ el item original como fallback.
   rompe la regla.)
 - **Un solo fetch wrapper:** `services/http.ts` centraliza la URL base y el mapeo
   de una respuesta no-2xx a un `ApiError` con el mensaje que manda el backend.
-- **Sin librería de estado global:** no sumé Redux/Zustand/React Query — dos
-  páginas y siete hooks no lo justifican. Si el proyecto creciera, lo primero que
+- **Sin librería de estado global:** no sumé Redux/Zustand/React Query — tres
+  páginas y ocho hooks no lo justifican. Si el proyecto creciera, lo primero que
   metería es React Query antes que estado global a mano.
 - **Duplicar reutiliza todo:** ni un service ni un endpoint nuevo del lado del
   backend. `useDuplicarPresupuesto` combina dos llamadas ya existentes
   (`presupuestosService.obtener` + `articulosService.buscar("")`) y el resto es
   el mismo formulario de alta con los datos precargados.
+- **Reporte sin auto-fetch:** `useTopArticulos` no trae nada al montar — no hay
+  un rango de fechas por defecto razonable sin que el usuario lo pida. Expone
+  un `buscar(desde, hasta, top)` que `ReportePage` dispara al enviar el form
+  (con un default sensato precargado: primer día del mes actual hasta hoy).
 
 ## Tipos (`types/dtos.ts`)
 
@@ -288,3 +307,4 @@ está armando en el formulario (todavía no tiene `Id` ni fue persistida).
 | `PresupuestoItemDto` | espejo de `PresupuestoItemDto` (backend) | `Presupuesto.items`, `PresupuestoItemsEditor` (vía `ItemBorrador`) |
 | `Factura` | espejo de `FacturaDto` | `useFacturar` |
 | `ItemBorrador` | sólo frontend — `Articulo` embebido + cantidad + descuento, sin `Id` | `usePresupuestoForm`, `PresupuestoItemsEditor` |
+| `TopArticulo` | espejo de `TopArticuloDto` | `useTopArticulos`, `TopArticulosTable` |

@@ -39,6 +39,12 @@ h1, h2, h3 { font-weight: 600; margin: 0; }
   padding: 0.9rem 1.5rem;
 }
 
+.app__nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .app__brand {
   font-weight: 700;
   font-size: 1.05rem;
@@ -46,6 +52,13 @@ h1, h2, h3 { font-weight: 600; margin: 0; }
   text-decoration: none;
   letter-spacing: -0.01em;
 }
+
+.app__navlink {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+.app__navlink:hover { color: var(--ink); }
 
 .app__main { flex: 1; padding: 2rem 1.5rem 4rem; }
 

@@ -104,3 +104,24 @@ test("duplicar un presupuesto precarga el form y crea uno nuevo con numero disti
   await expect(filaNueva).toContainText("Distribuidora del Sur S.A.");
   await expect(filaNueva.locator("td").nth(4)).toHaveText(totalOriginal);
 });
+
+test("el reporte de top articulos muestra un articulo recien facturado con su monto", async ({ page }) => {
+  // Creo y facturo mi propio presupuesto (no reutilizo el de otros tests) para
+  // que el assert no dependa de que mas se haya facturado en esta misma corrida.
+  await page.goto("/nuevo");
+  await page.getByLabel("Cliente").selectOption({ label: "Consumidor Final" });
+  await agregarArticulo(page, "ART-003"); // precio 220.000
+  await page.getByRole("button", { name: "Crear presupuesto" }).click();
+  await expect(page).toHaveURL("/");
+
+  const filaCreada = page.locator("table.presupuestos-table tbody tr").first();
+  await filaCreada.getByRole("button", { name: "Facturar" }).click();
+  await expect(filaCreada.locator(".badge")).toHaveText("Facturado");
+
+  await page.goto("/reporte");
+  await page.getByLabel("Top").fill("20");
+  await page.getByRole("button", { name: "Buscar" }).click();
+
+  const filaReporte = page.locator("table.presupuestos-table tbody tr", { hasText: "ART-003" });
+  await expect(filaReporte).toContainText("$220.000,00");
+});

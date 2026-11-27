@@ -144,11 +144,13 @@ falló (sin stock, vencido, ya facturado), no en un alert genérico.
   justifica correr ese riesgo. Rechaza con 400 si `hasta < desde` o `top <= 0`.
   Cubierto por 3 tests de integración nuevos (orden descendente, fuera de rango
   de fechas, validación de fechas invertidas) y probado a mano con `curl`.
-  El README sólo pide el endpoint para este punto (a diferencia de duplicar,
-  que pedía "endpoint + UI"), así que lo que sigue debajo de esta nota es un
-  agregado nuestro, no algo que pedía la consigna: sumamos igual una vista
-  simple en el cliente para consultarlo (filtro de fechas + top N + tabla de
-  resultados), con la misma arquitectura del resto del front.
+  Igual sumamos una vista simple en el cliente para consultarlo — no porque lo
+  pidiera la consigna sino porque ya teníamos la arquitectura puesta: página
+  `/reporte` con filtro de fecha desde/hasta (por defecto: primer día del mes
+  actual hasta hoy) y top N, un hook (`useTopArticulos`) que dispara la
+  consulta a pedido (no tiene sentido un rango de fechas por defecto para
+  auto-fetchear al montar), y una tabla de resultados. Mismo patrón
+  hook+service+componente que el resto del front. Cubierto por un 5º test e2e.
 
 ## Tests propios (Parte C)
 
@@ -166,17 +168,19 @@ reporte de top-N artículos (orden descendente por monto, fuera de rango de
 fechas, validación de fechas invertidas). 15/15 tests en verde (`dotnet test`
 sobre toda la solución, corrido en Docker).
 
-**Frontend — Playwright (`frontend/e2e/`):** 3 tests e2e contra la app real
-(frontend + backend corriendo juntos), replicando a mano lo mismo que validé
-manualmente durante el desarrollo: alta con alícuotas mixtas (los totales en vivo
-tienen que coincidir con lo que persiste el backend), facturar sin stock
-suficiente (el error del backend se ve en la fila), y facturar un presupuesto
-válido (pasa a "Facturado" y el botón desaparece). `playwright.config.ts` levanta
-el backend por Docker (borrando el `.db` antes, para partir de datos limpios) y
-el frontend con `npm run dev`; cada test crea su propio presupuesto y lo valida
-por la primera fila del listado (ordenado por número descendente), así no
-depende de cuántos presupuestos haya de corridas anteriores. Correr con
-`npm run test:e2e` desde `frontend/`.
+**Frontend — Playwright (`frontend/e2e/`):** 5 tests e2e contra la app real
+(frontend + backend corriendo juntos): alta con alícuotas mixtas (los totales en
+vivo tienen que coincidir con lo que persiste el backend), facturar sin stock
+suficiente (el error del backend se ve en la fila), facturar un presupuesto
+válido (pasa a "Facturado" y el botón desaparece), duplicar un presupuesto
+(precarga el form y crea uno con número nuevo), y el reporte de top artículos
+(factura uno propio y verifica que aparezca con el monto correcto).
+`playwright.config.ts` levanta el backend por Docker (borrando el `.db` antes,
+para partir de datos limpias) y el frontend con `npm run dev`; cada test crea
+sus propios datos y los valida de forma acotada (la primera fila del listado,
+o una fila filtrada por código de artículo), así no depende de cuántos
+presupuestos/facturas haya de corridas anteriores o de otros tests de la misma
+corrida. Correr con `npm run test:e2e` desde `frontend/`.
 
 > Nota: si la corrida de Playwright se corta de forma abrupta (Ctrl+C duro, kill
 > del proceso), el contenedor del backend puede quedar corriendo — `docker compose
@@ -235,9 +239,6 @@ localmente (sí tenía Node).
   columna es trivial de agregar en dev (se borra el `.db`) pero no hay un
   camino de migración real para una base ya en producción — lo primero que
   haría si se sigue este camino es migrar a EF Migrations.
-- **Reporte top-N artículos facturados** (Parte C, stretch que no llegué a
-  hacer): endpoint que agregue por `Factura`/`PresupuestoItem` en un rango de
-  fechas, más una vista simple en el cliente.
 - **Idempotencia de facturación bajo concurrencia real:** hoy se garantiza sólo
   a nivel de servicio (`FacturacionService` chequea `Estado == Facturado` antes
   de escribir). Con dos requests simultáneos sobre el mismo presupuesto podrían

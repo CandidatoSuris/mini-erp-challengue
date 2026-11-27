@@ -70,3 +70,11 @@ export interface ItemBorrador {
   cantidad: number;
   descuentoPct: number;
 }
+
+export interface TopArticulo {
+  articuloId: number;
+  codigo: string;
+  descripcion: string;
+  cantidadFacturada: number;
+  montoFacturado: number;
+}
