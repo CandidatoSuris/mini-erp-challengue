@@ -267,52 +267,93 @@ y dónde se equivocó o te llevó por mal camino.
 
 Usé Claude Code (Claude Sonnet 5) para todo el desarrollo, en una sesión continua,
 con Docker como entorno de ejecución porque no tenía el SDK de .NET instalado
-localmente (sí tenía Node).
+localmente (sí tenía Node). En un punto también usé un **segundo agente
+independiente** para un code review del diff completo.
 
-- **Bugs del backend:** le pedí que leyera el README, corriera los tests
-  existentes (`dotnet test` vía Docker, 3/6 fallando al principio) y los leyera
-  junto con el código para encontrar los bugs plantados. Encontró los 6 (2 con
-  test que los delataba, 4 explorando el código y los flujos del README) y los
-  arregló. Verifiqué cada fix yo mismo: corriendo los tests (6/6 verde) y
-  probando a mano con `curl` los 5 flujos de la sección "Flujos que deben
-  funcionar" contra el backend real.
-- **Arquitectura antes que código:** antes de tocar el frontend le pedí
-  explícitamente que armara documentación UML (modelo de clases + ciclo de vida
-  del backend, y después capas/dependencias + diagramas de secuencia del
-  frontend) para revisar el diseño *antes* de que generara una sola línea de
-  React. Eso me dejó objetar la estructura (ver `docs/backend-uml.md` y
-  `docs/frontend-uml.md`) sin tener que leer código para entenderla.
-- **Corrección de proceso:** la primera vez hizo `git commit` por su cuenta sin
-  pedirme autorización. Le corté eso ahí mismo y le pedí que de ahí en más
-  siempre hiciera `git add` y me pasara el mensaje de commit, pero que el commit
+### Para qué partes la usé
+
+Para todo: diagnóstico y arreglo de los 6 bugs plantados del backend,
+documentación de arquitectura (UML) antes de escribir código, todo el cliente
+React (estructura, componentes, hooks, services), los tres puntos de la Parte C
+(duplicar, reporte, tests propios), y un code review independiente del diff ya
+terminado (con un segundo agente, verificado por la sesión principal antes de
+aplicar nada).
+
+### Qué le pedí
+
+- Que leyera el README y corriera los tests existentes (`dotnet test` vía
+  Docker, 3/6 fallando al principio) antes de tocar una línea de código.
+- Que, antes de escribir el cliente React, armara documentación UML (modelo de
+  clases + ciclo de vida del backend ya arreglado, y después capas/dependencias
+  + diagramas de secuencia de la arquitectura propuesta del frontend) para que
+  yo la revisara *antes* de que generara una sola línea de React.
+- Que implementara "Duplicar presupuesto" (Parte C) validando primero mi
+  intuición de que no hacía falta tocar el backend, en vez de asumir que sí.
+- Que, ante los 8 hallazgos de un code review hecho por un segundo agente, no
+  aplicara ninguno a ciegas: primero verificar cada uno contra el código real
+  (con `curl`, tests, o reproduciendo el bug a mano) y recién después arreglar
+  los que fueran ciertos.
+- Que pidiera autorización explícita antes de cualquier `git commit`.
+
+### Qué acepté y qué descarté
+
+**Acepté**, siempre después de verificarlo yo mismo (tests + `curl` + probar en
+el browser), nunca "porque lo dijo la IA":
+- Los 6 fixes de bugs del backend originales.
+- La arquitectura de capas propuesta en los UML, con un solo ajuste mío
+  (separar `useCrearPresupuesto` de `usePresupuestos` para no refetchear la
+  grilla desde la página de alta).
+- Los 7 fixes de la revisión de código externa (ver esa sección más arriba),
+  cada uno reproducido antes de aceptarlo como bug real.
+
+**Descarté:**
+- Trackear de qué presupuesto viene un duplicado (columna `PresupuestoOrigenId`)
+  cuando me trajo el trade-off (cambio de contrato de API, sin EF Migrations
+  reales hoy) — no quería inflar el alcance de algo que el README no pedía, así
+  que lo mandé a "qué haría con más tiempo" en vez de implementarlo.
+- Uno de los 8 hallazgos del segundo agente (el del code review), que resultó
+  ser falso: decía que `items: null` tiraba un `NullReferenceException` → 500,
+  pero en los hechos ASP.NET Core ya lo rechazaba con 400 gracias a `Nullable`
+  habilitado en el proyecto. Lo descarté después de reproducirlo yo mismo con
+  `curl` y confirmar que el comportamiento real no coincidía con el reporte.
+
+### Dónde se equivocó (o yo tuve que corregir el rumbo)
+
+- La primera vez que le pedí fixes del backend, hizo `git commit` por su
+  cuenta sin pedirme autorización. Se lo corregí ahí mismo y pedí que de ahí
+  en más siempre hiciera `git add` + me pasara el mensaje, pero que el commit
   en sí lo haga yo — lo respetó el resto de la sesión.
-- **Duplicar presupuesto (Parte C):** yo tenía la intuición de que se podía
-  hacer sin tocar el backend; se lo planteé como pregunta y me confirmó el
-  razonamiento señalando el detalle técnico exacto que lo hace posible
-  (`CrearAsync` ya refresca precio/alícuota desde el artículo actual, no confía
-  en lo que manda el cliente). Lo implementé con esa base.
-- **Dónde frené una sugerencia:** cuando pregunté si valía la pena trackear de
-  qué presupuesto viene un duplicado, en vez de implementarlo directo me dio el
-  trade-off (columna nueva, sin EF Migrations reales en el proyecto hoy, cambio
-  de contrato en la API) y lo dejé para "qué haría con más tiempo" en vez de
-  meterlo — no quería inflar el alcance de algo que no pedía el README.
-- **Qué revisé/probé yo antes de aceptar cada entrega:** cada feature la probé
-  manualmente en el browser (capturas + inspección de red/consola) antes de
-  darla por terminada, además de los tests automáticos que fue agregando.
-- **Code review con un segundo agente:** le pedí a otro agente (no esta misma
-  sesión) que revisara el diff completo. Devolvió 8 hallazgos. No acepté
-  ninguno a ciegas — le pedí a esta sesión que verificara cada uno contra el
-  código real antes de tocar nada, y encontró que uno de los hallazgos del
-  otro agente era falso (decía que `items: null` tiraba un 500; en los hechos
-  ASP.NET ya lo rechazaba con 400). De los 7 restantes, confirmó cada uno con
-  `curl` contra la API real antes de arreglarlo — incluido reproducir
-  numéricamente el bug de redondeo (`node -e`) y fuzz-testearlo contra una
-  referencia exacta con 200.000 casos antes de dar el fix por bueno. Ver
-  "Revisión de código (CR) y correcciones" para el detalle de qué se corrigió
-  y qué quedó como deuda consciente.
+- El segundo agente (el del code review) se equivocó en uno de sus 8
+  hallazgos (el de `items: null` → 500, arriba). No lo descubrí porque "sonaba
+  raro": lo descubrí porque pedí explícitamente que cada hallazgo se verificara
+  contra el código real antes de tocar nada, y esa verificación lo sacó a la
+  luz. Si hubiera aplicado los 8 hallazgos directo, no habría pasado nada malo
+  en este caso puntual (el fix "innecesario" no habría roto nada), pero es el
+  tipo de cosa que en otro contexto sí podría introducir un bug donde no había
+  ninguno.
 
 ## Qué haría con más tiempo / qué falta para producción
 
+- **Notas de crédito/débito para dar de baja una factura.** Ahora mismo una
+  factura es inmutable por diseño (no se puede eliminar, ver "Revisión de
+  código" más arriba) — correcto para no perder el rastro contable, pero
+  también significa que hoy **no hay ninguna forma** de revertir una
+  facturación hecha por error o una devolución del cliente: la factura queda
+  viva para siempre y el stock ya descontado nunca se repone. Agregaría:
+  - `NotaCredito` (asociada a una `Factura`, numeración propia secuencial):
+    anula total o parcialmente los montos facturados y **repone** el stock de
+    los artículos devueltos — es la operación inversa de `FacturarAsync`
+    (`articulo.StockActual += cantidad` en vez de `-=`), con las mismas
+    validaciones espejadas (no se puede emitir una nota de crédito por más
+    cantidad de la que tiene la factura original, ni dos veces por el mismo
+    ítem).
+  - `NotaDebito`: agrega cargos adicionales a una factura ya emitida sin tener
+    que armar un presupuesto/factura nueva desde cero.
+  - Ninguna de las dos "borra" ni modifica la factura original — quedan como
+    documentos nuevos que la ajustan, que es como se hace en facturación real
+    (y resuelve de raíz el problema que motivó prohibir el `DELETE`: ahora
+    habría una forma *correcta* de dar de baja algo facturado, en vez de
+    ninguna).
 - **Trazabilidad de duplicados:** agregar `PresupuestoOrigenId` (nullable,
   auto-referencia a `Presupuesto`) para saber de qué presupuesto viene un
   duplicado, exponerlo en `CrearPresupuestoRequest`/`PresupuestoDto`, y mostrar
