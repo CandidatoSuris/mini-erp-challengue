@@ -38,3 +38,6 @@ app.UseCors();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>Expuesta para que MiniErp.Api.Tests pueda usar WebApplicationFactory&lt;Program&gt;.</summary>
+public partial class Program { }

@@ -116,9 +116,39 @@ falló (sin stock, vencido, ya facturado), no en un alert genérico.
   esconde una vez que el estado es `Facturado`.
 - Eliminar presupuesto desde la grilla (con confirmación).
 
-**Dejé afuera (Parte C, stretch) por tiempo:** duplicar presupuesto, el reporte de
-top-N artículos facturados, y tests propios del cliente. El detalle de qué haría
-con más tiempo está en la última sección.
+**Dejé afuera (Parte C, stretch) por tiempo:** duplicar presupuesto y el reporte de
+top-N artículos facturados. El detalle de qué haría con más tiempo está en la
+última sección.
+
+## Tests propios (Parte C)
+
+**Backend — `MiniErp.Api.Tests`** (nuevo proyecto, agregado a la solución): tests
+de integración sobre la API real vía `WebApplicationFactory<Program>` — HTTP +
+routing + JSON + EF Core/SQLite de punta a punta, en vez de llamar a los services
+directamente como hacen los tests unitarios existentes (`MiniErp.Tests`, que no
+toqué). Cada clase usa su propio archivo SQLite descartable
+(`IntegrationTestFactory`), así que corren aisladas entre sí y no tocan
+`minierp.db` de desarrollo. Un test por cada flujo de la sección "Flujos que
+deben funcionar" del README: crear y listar, IVA con alícuotas mixtas, numeración
+tras borrar (forzando el escenario real de colisión: borro el del medio, no el
+último), cantidad inválida, facturar sin stock, facturar dos veces. 12/12 tests
+en verde (`dotnet test` sobre toda la solución, corrido en Docker).
+
+**Frontend — Playwright (`frontend/e2e/`):** 3 tests e2e contra la app real
+(frontend + backend corriendo juntos), replicando a mano lo mismo que validé
+manualmente durante el desarrollo: alta con alícuotas mixtas (los totales en vivo
+tienen que coincidir con lo que persiste el backend), facturar sin stock
+suficiente (el error del backend se ve en la fila), y facturar un presupuesto
+válido (pasa a "Facturado" y el botón desaparece). `playwright.config.ts` levanta
+el backend por Docker (borrando el `.db` antes, para partir de datos limpios) y
+el frontend con `npm run dev`; cada test crea su propio presupuesto y lo valida
+por la primera fila del listado (ordenado por número descendente), así no
+depende de cuántos presupuestos haya de corridas anteriores. Correr con
+`npm run test:e2e` desde `frontend/`.
+
+> Nota: si la corrida de Playwright se corta de forma abrupta (Ctrl+C duro, kill
+> del proceso), el contenedor del backend puede quedar corriendo — `docker compose
+> down` desde la raíz del repo lo limpia.
 
 ## Cómo usé IA
 

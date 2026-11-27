@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -7,6 +7,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MiniErp.Api", "MiniErp.Api\MiniErp.Api.csproj", "{22222222-2222-2222-2222-222222222222}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MiniErp.Tests", "MiniErp.Tests\MiniErp.Tests.csproj", "{33333333-3333-3333-3333-333333333333}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MiniErp.Api.Tests", "MiniErp.Api.Tests\MiniErp.Api.Tests.csproj", "{7C6210EA-FEF8-4EA6-8014-97D854736044}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -26,6 +28,10 @@ Global
 		{33333333-3333-3333-3333-333333333333}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{33333333-3333-3333-3333-333333333333}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{33333333-3333-3333-3333-333333333333}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C6210EA-FEF8-4EA6-8014-97D854736044}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C6210EA-FEF8-4EA6-8014-97D854736044}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C6210EA-FEF8-4EA6-8014-97D854736044}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C6210EA-FEF8-4EA6-8014-97D854736044}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
