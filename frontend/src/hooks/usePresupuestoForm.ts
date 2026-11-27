@@ -50,7 +50,10 @@ export function usePresupuestoForm() {
     setItems((prev) => prev.filter((i) => i.articulo.id !== articuloId));
   };
 
+  /** Reemplaza todos los items de una, para precargar el form al duplicar un presupuesto. */
+  const reemplazarItems = (nuevosItems: ItemBorrador[]) => setItems(nuevosItems);
+
   const totales = useMemo(() => calcularTotales(items), [items]);
 
-  return { items, agregarItem, actualizarCantidad, actualizarDescuento, quitarItem, totales };
+  return { items, agregarItem, actualizarCantidad, actualizarDescuento, quitarItem, reemplazarItems, totales };
 }

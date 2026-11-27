@@ -1,8 +1,8 @@
 # Arquitectura del cliente — Mini ERP (frontend)
 
-> Capas, dependencias entre ellas y los dos flujos principales (alta de presupuesto,
-> facturar), tal como quedaron implementados en `frontend/src/`. Ver `NOTES.md` para
-> las decisiones de producto; este documento es el mapa técnico.
+> Capas, dependencias entre ellas y los tres flujos principales (alta de presupuesto,
+> facturar, duplicar), tal como quedaron implementados en `frontend/src/`. Ver
+> `NOTES.md` para las decisiones de producto; este documento es el mapa técnico.
 
 ## Organización
 
@@ -30,7 +30,8 @@ frontend/src/
 │  ├─ useFacturar.ts                # POST facturar + error por presupuesto
 │  ├─ useClientes.ts
 │  ├─ useArticuloSearch.ts          # busqueda con debounce
-│  └─ usePresupuestoForm.ts         # items del borrador + calcularTotales()
+│  ├─ usePresupuestoForm.ts         # items del borrador + calcularTotales()
+│  └─ useDuplicarPresupuesto.ts     # precarga el form desde un presupuesto existente
 ├─ services/
 │  ├─ http.ts                       # fetch wrapper + ApiError
 │  ├─ clientesService.ts
@@ -81,6 +82,7 @@ flowchart TB
         H4["useArticuloSearch"]
         H5["usePresupuestoForm"]
         H6["useCrearPresupuesto"]
+        H7["useDuplicarPresupuesto"]
     end
     subgraph SERVICES["services/"]
         S1["presupuestosService"]
@@ -105,12 +107,15 @@ flowchart TB
     P2 --> H4
     P2 --> H5
     P2 --> H6
+    P2 --> H7
 
     H1 --> S1
     H2 --> S2
     H3 --> S3
     H4 --> S4
     H6 --> S1
+    H7 --> S1
+    H7 --> S4
 
     S1 --> S5
     S2 --> S5
@@ -206,15 +211,69 @@ devuelve "Stock insuficiente para el artículo ART-006" en la fila; facturar dos
 veces el mismo presupuesto no es posible desde la UI porque el botón "Facturar"
 desaparece apenas el estado pasa a `Facturado`.
 
+## Flujo 3 — Duplicar presupuesto (sin tocar el backend)
+
+El insight que hace posible esto sin ningún endpoint nuevo: `POST /api/presupuestos`
+ya refresca precio y alícuota **actuales** del artículo al crear (no confía en lo que
+mande el cliente) y asigna número/fecha nuevos solo. "Clonar con número nuevo, fecha
+de hoy y precios refrescados" es exactamente lo que ya hace ese endpoint.
+
+```mermaid
+sequenceDiagram
+    actor Usuario
+    participant List as PresupuestosListPage
+    participant Page as NuevoPresupuestoPage
+    participant Dup as useDuplicarPresupuesto
+    participant PresSvc as presupuestosService
+    participant ArtSvc as articulosService
+    participant Form as usePresupuestoForm
+    participant Crear as useCrearPresupuesto
+    participant API as Backend API
+
+    Usuario->>List: click "Duplicar" en una fila
+    List->>Page: navega a /nuevo?duplicarDe={id}
+
+    Page->>Dup: useDuplicarPresupuesto(id)
+    Dup->>PresSvc: obtener(id)
+    PresSvc->>API: GET /api/presupuestos/{id}
+    Dup->>ArtSvc: buscar("")
+    ArtSvc->>API: GET /api/articulos (sin filtro = todos)
+    API-->>Dup: presupuesto original + articulos actuales
+    Dup-->>Page: { clienteId, validezDias, items con precios YA refrescados }
+
+    Page->>Form: reemplazarItems(items)
+    Page->>Usuario: form precargado, banner "Duplicando presupuesto #N"
+
+    Usuario->>Page: revisa/edita y confirma "Crear presupuesto"
+    Page->>Crear: crear(request)
+    Crear->>PresSvc: crear(request)
+    PresSvc->>API: POST /api/presupuestos
+    API-->>PresSvc: PresupuestoDto (numero nuevo, fecha de hoy, precios recalculados igual)
+    Page->>Usuario: redirige al listado
+```
+
+El `GET /api/articulos` sin filtro sólo existe para que el *preview* de totales en el
+form ya se vea con precios actuales antes de confirmar — el refresco real, el que
+queda persistido, lo vuelve a hacer el backend en `CrearAsync` sin importar lo que
+mande el cliente. Si el artículo original ya no existe en el catálogo (no hay endpoint
+para borrar artículos hoy, así que no debería pasar), se cae al snapshot guardado en
+el item original como fallback.
+
 ## Decisiones
 
 - **Components tontos:** ningún componente en `components/` llama a un hook de
-  datos ni a un service. Todo entra por props.
+  datos ni a un service. Todo entra por props. (La excepción visual es el `Link`
+  de "Duplicar" en `PresupuestosTable` — es navegación, no fetch de datos; no
+  rompe la regla.)
 - **Un solo fetch wrapper:** `services/http.ts` centraliza la URL base y el mapeo
   de una respuesta no-2xx a un `ApiError` con el mensaje que manda el backend.
 - **Sin librería de estado global:** no sumé Redux/Zustand/React Query — dos
-  páginas y seis hooks no lo justifican. Si el proyecto creciera, lo primero que
+  páginas y siete hooks no lo justifican. Si el proyecto creciera, lo primero que
   metería es React Query antes que estado global a mano.
+- **Duplicar reutiliza todo:** ni un service ni un endpoint nuevo del lado del
+  backend. `useDuplicarPresupuesto` combina dos llamadas ya existentes
+  (`presupuestosService.obtener` + `articulosService.buscar("")`) y el resto es
+  el mismo formulario de alta con los datos precargados.
 
 ## Tipos (`types/dtos.ts`)
 

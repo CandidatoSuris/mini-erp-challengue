@@ -73,3 +73,34 @@ test("facturar un presupuesto valido lo pasa a Facturado y oculta el boton", asy
   await expect(primeraFila.locator(".badge")).toHaveText("Facturado");
   await expect(primeraFila.getByRole("button", { name: "Facturar" })).toHaveCount(0);
 });
+
+test("duplicar un presupuesto precarga el form y crea uno nuevo con numero distinto", async ({ page }) => {
+  await page.goto("/nuevo");
+  await page.getByLabel("Cliente").selectOption({ label: "Distribuidora del Sur S.A." });
+  await agregarArticulo(page, "ART-005");
+
+  await page.getByRole("button", { name: "Crear presupuesto" }).click();
+  await expect(page).toHaveURL("/");
+
+  const filaOriginal = page.locator("table.presupuestos-table tbody tr").first();
+  const numeroOriginal = await filaOriginal.locator("td").first().innerText();
+  const totalOriginal = await filaOriginal.locator("td").nth(4).innerText();
+
+  await filaOriginal.getByRole("link", { name: "Duplicar" }).click();
+
+  await expect(page).toHaveURL(/\/nuevo\?duplicarDe=\d+/);
+  await expect(page.getByText(`Duplicando el presupuesto #${numeroOriginal}`)).toBeVisible();
+  await expect(page.getByLabel("Cliente")).not.toHaveValue("");
+  await expect(page.locator(".items-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".totales")).toContainText(totalOriginal);
+
+  await page.getByRole("button", { name: "Crear presupuesto" }).click();
+  await expect(page).toHaveURL("/");
+
+  const filaNueva = page.locator("table.presupuestos-table tbody tr").first();
+  const numeroNuevo = await filaNueva.locator("td").first().innerText();
+
+  expect(Number(numeroNuevo)).toBeGreaterThan(Number(numeroOriginal));
+  await expect(filaNueva).toContainText("Distribuidora del Sur S.A.");
+  await expect(filaNueva.locator("td").nth(4)).toHaveText(totalOriginal);
+});

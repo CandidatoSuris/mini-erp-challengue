@@ -61,6 +61,9 @@ export function PresupuestosTable({ presupuestos, facturandoId, erroresFacturaci
                     {facturandoId === p.id ? "Facturando..." : "Facturar"}
                   </button>
                 )}
+                <Link to={`/nuevo?duplicarDe=${p.id}`} className="link-button">
+                  Duplicar
+                </Link>
                 <button type="button" className="link-button" onClick={() => onEliminar(p.id)}>
                   Eliminar
                 </button>
