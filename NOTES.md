@@ -131,8 +131,24 @@ falló (sin stock, vencido, ya facturado), no en un alert genérico.
   `useDuplicarPresupuesto` + un método `reemplazarItems` en `usePresupuestoForm`;
   nada más cambió. Cubierto por un test e2e adicional (ahora son 4).
 
-**Dejé afuera (stretch) por tiempo:** el reporte de top-N artículos facturados.
-El detalle de qué haría con más tiempo está en la última sección.
+- **Reporte top-N artículos por monto facturado** — sólo backend, que es lo que
+  pide el README para este punto (a diferencia de duplicar, que pedía
+  "endpoint + UI"). `GET /api/reportes/top-articulos?desde=&hasta=&top=` en un
+  controller nuevo (`ReportesController`) + un service nuevo (`ReportesService`).
+  "Monto facturado" = subtotal de línea (sin IVA, misma convención que el resto
+  de la app) de los `PresupuestoItem` cuyas `Factura` cayeron dentro del rango
+  de fechas, agrupado por artículo y ordenado descendente. La agregación la hago
+  en memoria después de traer las filas (sin aritmética en la query): SQLite no
+  tiene tipo decimal nativo, EF Core lo guarda como texto, y sumar/multiplicar
+  decimales dentro del SQL generado es frágil — el volumen de un ERP chico no
+  justifica correr ese riesgo. Rechaza con 400 si `hasta < desde` o `top <= 0`.
+  Cubierto por 3 tests de integración nuevos (orden descendente, fuera de rango
+  de fechas, validación de fechas invertidas) y probado a mano con `curl`.
+  El README sólo pide el endpoint para este punto (a diferencia de duplicar,
+  que pedía "endpoint + UI"), así que lo que sigue debajo de esta nota es un
+  agregado nuestro, no algo que pedía la consigna: sumamos igual una vista
+  simple en el cliente para consultarlo (filtro de fechas + top N + tabla de
+  resultados), con la misma arquitectura del resto del front.
 
 ## Tests propios (Parte C)
 
@@ -145,8 +161,10 @@ toqué). Cada clase usa su propio archivo SQLite descartable
 `minierp.db` de desarrollo. Un test por cada flujo de la sección "Flujos que
 deben funcionar" del README: crear y listar, IVA con alícuotas mixtas, numeración
 tras borrar (forzando el escenario real de colisión: borro el del medio, no el
-último), cantidad inválida, facturar sin stock, facturar dos veces. 12/12 tests
-en verde (`dotnet test` sobre toda la solución, corrido en Docker).
+último), cantidad inválida, facturar sin stock, facturar dos veces, y el
+reporte de top-N artículos (orden descendente por monto, fuera de rango de
+fechas, validación de fechas invertidas). 15/15 tests en verde (`dotnet test`
+sobre toda la solución, corrido en Docker).
 
 **Frontend — Playwright (`frontend/e2e/`):** 3 tests e2e contra la app real
 (frontend + backend corriendo juntos), replicando a mano lo mismo que validé

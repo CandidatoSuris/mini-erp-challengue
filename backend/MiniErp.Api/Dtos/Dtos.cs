@@ -56,3 +56,10 @@ public record ClienteDto(
     string RazonSocial,
     string Cuit,
     string CondicionIva);
+
+public record TopArticuloDto(
+    int ArticuloId,
+    string Codigo,
+    string Descripcion,
+    int CantidadFacturada,
+    decimal MontoFacturado);

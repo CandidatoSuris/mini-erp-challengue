@@ -113,3 +113,4 @@ los asigna actualmente.
 | Presupuesto vencido no se factura | `FacturacionService.FacturarAsync` (`Fecha + ValidezDias`) |
 | Numeración secuencial sin colisiones | `NumeracionService` (`MAX(Numero)+1`) |
 | Cantidad y descuento válidos | `CrearPresupuestoItemDto` (`DataAnnotations`) |
+| Top-N artículos por monto facturado en un rango de fechas | `ReportesService.TopArticulosPorMontoFacturadoAsync` (`GET /api/reportes/top-articulos`) |
