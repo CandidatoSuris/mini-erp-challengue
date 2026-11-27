@@ -58,9 +58,67 @@ Estructura del proyecto, librerías que usaste y por qué, y cómo resolvés los
 totales en vivo (subtotal, IVA, total) para que coincidan con el backend.
 -->
 
+**Stack:** React 19 + TypeScript + Vite. Única librería externa: `react-router-dom`
+(dos rutas: `/` listado, `/nuevo` alta). Nada de Redux/Zustand/React Query — con dos
+páginas y cinco hooks no se justifica; si el proyecto creciera, lo primero que sumaría
+es React Query antes que estado global a mano.
+
+**Estructura** (`frontend/src/`), en capas con una sola dirección de dependencia
+(`pages → components/hooks → services`, nunca al revés):
+
+```
+pages/        PresupuestosListPage, NuevoPresupuestoPage
+components/   presentacionales puros, reciben todo por props (nunca importan
+              hooks ni services)
+hooks/        estado + reglas de negocio del cliente (useClientes,
+              useArticuloSearch, usePresupuestos, useCrearPresupuesto,
+              useFacturar, usePresupuestoForm)
+services/     única capa que sabe que existe fetch/URL base (http.ts +
+              un service por recurso)
+types/        espejo de MiniErp.Api.Dtos, más ItemBorrador (sólo frontend)
+```
+
+Documenté esta arquitectura en UML antes de escribir código (diagrama de
+dependencias + secuencia de los dos flujos) para poder revisarla antes de
+implementar — ver `docs/backend-uml.md` para el modelo del backend y
+`docs/frontend-uml.md` para el del cliente, ya actualizado para reflejar el único
+ajuste real respecto de la propuesta (`useCrearPresupuesto` separado de
+`usePresupuestos`, explicado ahí mismo).
+
+**Totales en vivo:** `usePresupuestoForm` (`calcularTotales` en
+`hooks/usePresupuestoForm.ts`) replica **exactamente** la regla del backend:
+`subtotalLinea = cantidad × precio × (1 − descuento/100)`, IVA por línea
+(`subtotalLinea × alicuota/100`) redondeado a 2 decimales con la misma estrategia
+de redondeo (half-away-from-zero) antes de sumar. Lo verifiqué contra el flujo del
+README (ART-001 + ART-004 sin descuento → subtotal 39.500, IVA 7.822,50, total
+47.322,50) tanto en el backend como en el preview del formulario — dan igual. El
+backend sigue siendo la fuente de verdad: lo que persiste es siempre la respuesta
+de `POST /api/presupuestos`, nunca el cálculo del cliente.
+
+**Manejo de errores:** `services/http.ts` centraliza el `fetch`, arma la URL base y
+convierte cualquier respuesta no-2xx en un `ApiError` con el mensaje que mandó el
+backend (`{ error: "..." }` o el primer mensaje de `ModelState`). Los hooks
+atrapan ese error y lo exponen como string; las páginas lo muestran con
+`ErrorAlert`. Al facturar, el error se muestra **en la fila** del presupuesto que
+falló (sin stock, vencido, ya facturado), no en un alert genérico.
+
 ## Qué hice y qué dejé afuera
 
 <!-- Qué completaste, qué priorizaste y por qué, qué quedó pendiente. -->
+
+**Hecho (Parte B, must-have):**
+- Grilla de presupuestos con número, fecha, cliente, estado (badge) y total.
+- Alta de presupuesto: cliente, búsqueda de artículos con debounce, cantidad y
+  descuento por línea, totales en vivo correctos (incluye validación HTML5
+  `min`/`max` + validación propia antes de pegarle a la API).
+- Facturar desde la grilla, con el mensaje de error del backend mostrado inline
+  si no se puede (sin stock, vencido, ya facturado). El botón "Facturar" se
+  esconde una vez que el estado es `Facturado`.
+- Eliminar presupuesto desde la grilla (con confirmación).
+
+**Dejé afuera (Parte C, stretch) por tiempo:** duplicar presupuesto, el reporte de
+top-N artículos facturados, y tests propios del cliente. El detalle de qué haría
+con más tiempo está en la última sección.
 
 ## Cómo usé IA
 
